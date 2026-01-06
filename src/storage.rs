@@ -6,6 +6,9 @@ use std::path::{Path, PathBuf};
 
 use crate::models::Deck;
 
+/// Bundled deck: Development Workflow
+const BUNDLED_DEV_WORKFLOW: &str = include_str!("../bundled_decks/development-workflow.json");
+
 /// Handles deck persistence.
 pub struct DeckStorage {
     decks_dir: PathBuf,
@@ -16,7 +19,30 @@ impl DeckStorage {
         fs::create_dir_all(&decks_dir)
             .with_context(|| format!("Failed to create decks directory: {:?}", decks_dir))?;
 
-        Ok(Self { decks_dir })
+        let storage = Self { decks_dir };
+        storage.install_bundled_decks();
+        Ok(storage)
+    }
+
+    /// Install bundled decks if they don't already exist.
+    fn install_bundled_decks(&self) {
+        // Check if any decks exist - if so, user has already used the app
+        if let Ok(entries) = fs::read_dir(&self.decks_dir) {
+            if entries.filter_map(|e| e.ok()).any(|e| {
+                e.path().extension().map_or(false, |ext| ext == "json")
+            }) {
+                return; // User already has decks, don't overwrite
+            }
+        }
+
+        // Install bundled decks for first-time users
+        if let Ok(mut deck) = serde_json::from_str::<Deck>(BUNDLED_DEV_WORKFLOW) {
+            // Reset all cards to fresh state
+            for card in &mut deck.cards {
+                card.reset_progress();
+            }
+            let _ = self.save_deck(&deck);
+        }
     }
 
     /// Get default storage location.

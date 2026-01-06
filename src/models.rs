@@ -110,6 +110,17 @@ impl Card {
             Some(due) => Local::now() >= due,
         }
     }
+
+    /// Reset card to fresh/unlearned state.
+    pub fn reset_progress(&mut self) {
+        self.ease_factor = 2.5;
+        self.interval = 0;
+        self.repetitions = 0;
+        self.due_date = None;
+        self.last_reviewed = None;
+        self.total_reviews = 0;
+        self.lapses = 0;
+    }
 }
 
 /// Statistics for a deck.
