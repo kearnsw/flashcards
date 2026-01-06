@@ -1,6 +1,6 @@
 # SRL - Spaced Repetition Learning
 
-A beautiful, fast Anki-style spaced repetition flashcard app for the terminal.
+A beautiful, fast spaced repetition flashcard app for the terminal.
 
 ```
   ███████╗██████╗ ██╗
@@ -118,7 +118,7 @@ The core insight is that memories have a "forgetting curve" - we forget informat
 
 ### The SM-2 Algorithm
 
-SRL implements the **SM-2 (SuperMemo 2) algorithm**, developed by Piotr Wozniak in 1987. SM-2 is the foundation of modern spaced repetition software, including Anki.
+SRL implements the **SM-2 (SuperMemo 2) algorithm**, developed by Piotr Wozniak in 1987. SM-2 is the foundation of modern spaced repetition software.
 
 #### How It Works
 
@@ -152,7 +152,6 @@ Where `q` is the quality of response (0-5 scale).
   - [Full thesis (SuperMemo)](https://super-memory.com/english/ol.htm)
 - Wozniak, P. A., & Gorzelanczyk, E. J. (1994). Optimization of repetition spacing in the practice of learning. *Acta Neurobiologiae Experimentalis*, 54, 59-62.
 - [SM-2 Algorithm Description (SuperMemo)](https://super-memory.com/english/ol/sm2.htm)
-- [Anki's Implementation of SM-2](https://docs.ankiweb.net/studying.html#spaced-repetition)
 
 ### Why Spaced Repetition Works
 
