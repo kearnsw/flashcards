@@ -70,6 +70,7 @@ pub struct App {
     pub card_edit_front: String,
     pub card_edit_back: String,
     pub card_edit_focus: usize,  // 0 = front, 1 = back
+    pub card_edit_cursor: usize, // cursor position in current field
     pub card_delete_pending: bool,
 
     // Status message (shown temporarily)
@@ -111,6 +112,7 @@ impl App {
             card_edit_front: String::new(),
             card_edit_back: String::new(),
             card_edit_focus: 0,
+            card_edit_cursor: 0,
             card_delete_pending: false,
             // Status
             status_message: None,
@@ -307,9 +309,11 @@ impl App {
         if let Some(i) = self.card_list_state.selected() {
             if let Some(ref deck) = self.current_deck {
                 if let Some(card) = deck.cards.get(i) {
-                    self.card_edit_front = card.front.clone();
-                    self.card_edit_back = card.back.clone();
+                    // Trim quotes when loading into edit fields
+                    self.card_edit_front = card.front.trim_matches('"').trim().to_string();
+                    self.card_edit_back = card.back.trim_matches('"').trim().to_string();
                     self.card_edit_focus = 0;
+                    self.card_edit_cursor = self.card_edit_front.chars().count();
                     self.card_edit_mode = true;
                     self.card_delete_pending = false;
                 }
@@ -521,29 +525,90 @@ impl App {
 
     fn handle_card_browser_keys(&mut self, key: KeyCode) {
         if self.card_edit_mode {
-            // Edit mode
+            // Edit mode - calculate field length first (before mutable borrow)
+            let field_len = if self.card_edit_focus == 0 {
+                self.card_edit_front.chars().count()
+            } else {
+                self.card_edit_back.chars().count()
+            };
+
             match key {
                 KeyCode::Esc => {
                     self.cancel_card_edit();
                 }
                 KeyCode::Tab => {
+                    // Switch field and set cursor to end of new field
                     self.card_edit_focus = (self.card_edit_focus + 1) % 2;
+                    self.card_edit_cursor = if self.card_edit_focus == 0 {
+                        self.card_edit_front.chars().count()
+                    } else {
+                        self.card_edit_back.chars().count()
+                    };
                 }
                 KeyCode::Enter => {
                     self.save_card_edit();
                 }
-                KeyCode::Char(c) => {
-                    if self.card_edit_focus == 0 {
-                        self.card_edit_front.push(c);
-                    } else {
-                        self.card_edit_back.push(c);
+                KeyCode::Left => {
+                    if self.card_edit_cursor > 0 {
+                        self.card_edit_cursor -= 1;
                     }
                 }
-                KeyCode::Backspace => {
-                    if self.card_edit_focus == 0 {
-                        self.card_edit_front.pop();
+                KeyCode::Right => {
+                    if self.card_edit_cursor < field_len {
+                        self.card_edit_cursor += 1;
+                    }
+                }
+                KeyCode::Home => {
+                    self.card_edit_cursor = 0;
+                }
+                KeyCode::End => {
+                    self.card_edit_cursor = field_len;
+                }
+                KeyCode::Char(c) => {
+                    // Insert character at cursor position
+                    let field = if self.card_edit_focus == 0 {
+                        &mut self.card_edit_front
                     } else {
-                        self.card_edit_back.pop();
+                        &mut self.card_edit_back
+                    };
+                    let byte_pos = field.char_indices()
+                        .nth(self.card_edit_cursor)
+                        .map(|(i, _)| i)
+                        .unwrap_or(field.len());
+                    field.insert(byte_pos, c);
+                    self.card_edit_cursor += 1;
+                }
+                KeyCode::Backspace => {
+                    if self.card_edit_cursor > 0 {
+                        // Remove character before cursor
+                        let field = if self.card_edit_focus == 0 {
+                            &mut self.card_edit_front
+                        } else {
+                            &mut self.card_edit_back
+                        };
+                        let byte_pos = field.char_indices()
+                            .nth(self.card_edit_cursor - 1)
+                            .map(|(i, _)| i)
+                            .unwrap_or(0);
+                        field.remove(byte_pos);
+                        self.card_edit_cursor -= 1;
+                    }
+                }
+                KeyCode::Delete => {
+                    if self.card_edit_cursor < field_len {
+                        // Remove character at cursor
+                        let field = if self.card_edit_focus == 0 {
+                            &mut self.card_edit_front
+                        } else {
+                            &mut self.card_edit_back
+                        };
+                        let byte_pos = field.char_indices()
+                            .nth(self.card_edit_cursor)
+                            .map(|(i, _)| i)
+                            .unwrap_or(field.len());
+                        if byte_pos < field.len() {
+                            field.remove(byte_pos);
+                        }
                     }
                 }
                 _ => {}
@@ -886,7 +951,7 @@ impl App {
                 .cards
                 .iter()
                 .map(|card| {
-                    let front_preview: String = card.front.chars().take(25).collect();
+                    let front_preview: String = card.front.trim_matches('"').trim().chars().take(25).collect();
                     let status = if card.is_new() {
                         "(new)".to_string()
                     } else if card.is_due() {
@@ -960,9 +1025,9 @@ impl App {
         let chunks = Layout::vertical([
             Constraint::Length(5),   // Front
             Constraint::Length(1),   // Spacing
-            Constraint::Length(5),   // Back
+            Constraint::Min(8),      // Back - larger to show more content
             Constraint::Length(1),   // Spacing
-            Constraint::Min(5),      // Metadata
+            Constraint::Length(7),   // Metadata
         ])
         .split(area);
 
@@ -981,16 +1046,17 @@ impl App {
                         .border_style(front_style)
                         .title(" Front (editing) ")
                         .title_style(front_style),
-                );
+                )
+                .wrap(ratatui::widgets::Wrap { trim: true });
             frame.render_widget(front, chunks[0]);
 
             // Set cursor position for front field (accounting for wrap)
             if self.card_edit_focus == 0 {
                 let inner_width = chunks[0].width.saturating_sub(2) as usize; // -2 for borders
-                let text_len = self.card_edit_front.chars().count();
+                let cursor_pos = self.card_edit_cursor;
                 let (cursor_x, cursor_y) = if inner_width > 0 {
-                    let row = text_len / inner_width;
-                    let col = text_len % inner_width;
+                    let row = cursor_pos / inner_width;
+                    let col = cursor_pos % inner_width;
                     (chunks[0].x + 1 + col as u16, chunks[0].y + 1 + row as u16)
                 } else {
                     (chunks[0].x + 1, chunks[0].y + 1)
@@ -1011,16 +1077,17 @@ impl App {
                         .border_style(back_style)
                         .title(" Back (editing) ")
                         .title_style(back_style),
-                );
+                )
+                .wrap(ratatui::widgets::Wrap { trim: true });
             frame.render_widget(back, chunks[2]);
 
             // Set cursor position for back field (accounting for wrap)
             if self.card_edit_focus == 1 {
                 let inner_width = chunks[2].width.saturating_sub(2) as usize; // -2 for borders
-                let text_len = self.card_edit_back.chars().count();
+                let cursor_pos = self.card_edit_cursor;
                 let (cursor_x, cursor_y) = if inner_width > 0 {
-                    let row = text_len / inner_width;
-                    let col = text_len % inner_width;
+                    let row = cursor_pos / inner_width;
+                    let col = cursor_pos % inner_width;
                     (chunks[2].x + 1 + col as u16, chunks[2].y + 1 + row as u16)
                 } else {
                     (chunks[2].x + 1, chunks[2].y + 1)
@@ -1028,8 +1095,9 @@ impl App {
                 frame.set_cursor_position((cursor_x, cursor_y));
             }
         } else {
-            // View mode
-            let front = Paragraph::new(card.front.as_str())
+            // View mode - trim quotes from display
+            let front_text = card.front.trim_matches('"').trim();
+            let front = Paragraph::new(front_text)
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
@@ -1041,7 +1109,8 @@ impl App {
                 .wrap(ratatui::widgets::Wrap { trim: true });
             frame.render_widget(front, chunks[0]);
 
-            let back = Paragraph::new(card.back.as_str())
+            let back_text = card.back.trim_matches('"').trim();
+            let back = Paragraph::new(back_text)
                 .block(
                     Block::default()
                         .borders(Borders::ALL)

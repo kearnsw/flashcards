@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{block::BorderType, Block, Borders, Paragraph, Widget, Wrap},
+    widgets::{block::BorderType, Block, Borders, Paragraph, Widget},
 };
 use textwrap::{wrap, Options, WordSplitter};
 use unicode_width::UnicodeWidthStr;
@@ -199,21 +199,38 @@ impl Widget for FlashcardWidget<'_> {
         let inner = block.inner(area);
         block.render(area, buf);
 
-        // Content
-        let content_para = Paragraph::new(self.content)
-            .alignment(Alignment::Center)
-            .wrap(Wrap { trim: true })
-            .style(Style::default().fg(self.theme.colors.text));
+        // Trim leading/trailing quotation marks from content
+        let content = self.content.trim_matches('"').trim();
 
-        // Calculate actual content height accounting for word wrapping
-        // Use textwrap to estimate line count (may differ slightly from ratatui's internal wrapping)
-        let content_width = inner.width.saturating_sub(4) as usize;
-        let estimated_lines: u16 = if content_width > 0 {
+        // Build lines from content, handling explicit newlines
+        // Cap width at 70 chars for readability on wide terminals
+        let available_width = inner.width.saturating_sub(4) as usize;
+        let content_width = available_width.min(70).max(20);
+        let mut all_lines: Vec<Line> = Vec::new();
+
+        if content_width > 0 {
             let options = Options::new(content_width).word_splitter(WordSplitter::NoHyphenation);
-            wrap(self.content, options).len() as u16
+            // Split on explicit newlines first, then wrap each paragraph
+            for paragraph in content.split('\n') {
+                if paragraph.is_empty() {
+                    all_lines.push(Line::from(""));
+                } else {
+                    let wrapped = wrap(paragraph, &options);
+                    for wrapped_line in wrapped {
+                        all_lines.push(Line::from(wrapped_line.into_owned()));
+                    }
+                }
+            }
         } else {
-            1
-        };
+            all_lines.push(Line::from(content.to_string()));
+        }
+
+        let estimated_lines = all_lines.len() as u16;
+
+        // Content - use pre-computed lines for proper multiline support
+        let content_para = Paragraph::new(all_lines)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(self.theme.colors.text));
 
         // Only center vertically if there's comfortable space (at least 2 extra rows)
         // This prevents text from being pushed down and clipped
