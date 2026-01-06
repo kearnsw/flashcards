@@ -18,6 +18,7 @@ Built with [Ratatui](https://ratatui.rs) for a modern TUI experience.
 
 - **SM-2 Spaced Repetition** - Optimal review scheduling based on recall quality
 - **Card Browser** - View, edit, and delete cards with full metadata
+- **Statistics Dashboard** - Track total reviews, daily/weekly streaks, cards by difficulty
 - **10 Themes** - Beautiful color schemes including Kanagawa Wave
 - **Backup System** - Export/import all decks as JSON
 - **CSV Import** - Bulk import from spreadsheets
@@ -67,6 +68,7 @@ srl --import-folder ./decks/
 | `j/k` | Navigate |
 | `Enter` | Study deck |
 | `b` | Browse cards |
+| `s` | Statistics |
 | `n` | New deck |
 | `d` | Delete deck |
 | `x` | Export backup |

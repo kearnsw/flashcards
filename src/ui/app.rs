@@ -28,6 +28,7 @@ pub enum Screen {
     Study,
     AddCard,
     CardBrowser,
+    Stats,
     Complete,
 }
 
@@ -373,6 +374,7 @@ impl App {
                     Screen::Study => self.handle_study_keys(key.code),
                     Screen::AddCard => self.handle_add_card_keys(key.code),
                     Screen::CardBrowser => self.handle_card_browser_keys(key.code),
+                    Screen::Stats => self.handle_stats_keys(key.code),
                     Screen::Complete => self.handle_complete_keys(key.code),
                 }
             }
@@ -420,6 +422,9 @@ impl App {
             }
             KeyCode::Char('x') => {
                 self.export_backup();
+            }
+            KeyCode::Char('s') => {
+                self.screen = Screen::Stats;
             }
             _ => {}
         }
@@ -500,6 +505,16 @@ impl App {
                 self.current_deck = None;
                 self.refresh_deck_list();
             }
+            _ => {}
+        }
+    }
+
+    fn handle_stats_keys(&mut self, key: KeyCode) {
+        match key {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.screen = Screen::DeckSelect;
+            }
+            KeyCode::Char('t') => self.cycle_theme(),
             _ => {}
         }
     }
@@ -606,6 +621,7 @@ impl App {
             Screen::Study => self.render_study(frame, area),
             Screen::AddCard => self.render_add_card(frame, area),
             Screen::CardBrowser => self.render_card_browser(frame, area),
+            Screen::Stats => self.render_stats(frame, area),
             Screen::Complete => self.render_complete(frame, area),
         }
     }
@@ -657,13 +673,14 @@ impl App {
 
         // Key hints with theme indicator
         let theme_hint = format!("[{}]", self.theme.name.display_name());
-        let hints_data: [(&str, &str); 8] = [
+        let hints_data: [(&str, &str); 9] = [
             ("j/k", "nav"),
             ("Enter", "study"),
             ("b", "browse"),
             ("n", "new"),
             ("d", "del"),
             ("x", "export"),
+            ("s", "stats"),
             ("t", &theme_hint),
             ("q", "quit"),
         ];
@@ -1091,6 +1108,152 @@ impl App {
         frame.render_widget(metadata_block, chunks[4]);
     }
 
+    fn render_stats(&mut self, frame: &mut Frame, area: Rect) {
+        let chunks = Layout::vertical([
+            Constraint::Length(3),   // Title
+            Constraint::Length(1),   // Spacing
+            Constraint::Min(10),     // Stats content
+            Constraint::Length(2),   // Hints
+        ])
+        .split(area);
+
+        // Title
+        let title = Paragraph::new("Statistics")
+            .alignment(Alignment::Center)
+            .style(self.theme.title());
+        frame.render_widget(title, chunks[0]);
+
+        // Calculate aggregate stats from all decks
+        let mut total_reviews: u32 = 0;
+        let mut total_cards: usize = 0;
+        let mut review_dates: Vec<chrono::NaiveDate> = Vec::new();
+        let mut ease_counts = EaseLevelCounts::default();
+
+        for deck_info in &self.deck_list {
+            if let Ok(Some(deck)) = self.storage.load_deck(&deck_info.id) {
+                for card in &deck.cards {
+                    total_cards += 1;
+                    total_reviews += card.total_reviews;
+
+                    // Collect review dates for streak calculation
+                    if let Some(reviewed) = card.last_reviewed {
+                        review_dates.push(reviewed.date_naive());
+                    }
+
+                    // Categorize by ease factor
+                    if card.is_new() {
+                        ease_counts.new += 1;
+                    } else if card.ease_factor >= 2.5 {
+                        ease_counts.easy += 1;
+                    } else if card.ease_factor >= 2.0 {
+                        ease_counts.good += 1;
+                    } else if card.ease_factor >= 1.5 {
+                        ease_counts.hard += 1;
+                    } else {
+                        ease_counts.struggling += 1;
+                    }
+                }
+            }
+        }
+
+        // Calculate streaks
+        let (daily_streak, weekly_streak) = calculate_streaks(&review_dates);
+
+        // Main content area
+        let content_area = centered_rect(70, 100, chunks[2]);
+        let stat_chunks = Layout::vertical([
+            Constraint::Length(7),   // Overview stats
+            Constraint::Length(1),   // Spacing
+            Constraint::Min(8),      // Ease breakdown
+        ])
+        .split(content_area);
+
+        // Overview stats
+        let overview_lines = vec![
+            Line::from(vec![
+                Span::styled("Total Cards: ", Style::default().fg(self.theme.colors.text_muted)),
+                Span::styled(total_cards.to_string(), Style::default().fg(self.theme.colors.primary).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::styled("Total Reviews: ", Style::default().fg(self.theme.colors.text_muted)),
+                Span::styled(total_reviews.to_string(), Style::default().fg(self.theme.colors.primary).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("Daily Streak: ", Style::default().fg(self.theme.colors.text_muted)),
+                Span::styled(
+                    format!("{} day{}", daily_streak, if daily_streak == 1 { "" } else { "s" }),
+                    Style::default().fg(if daily_streak > 0 { self.theme.colors.success } else { self.theme.colors.text_dim }),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Weekly Streak: ", Style::default().fg(self.theme.colors.text_muted)),
+                Span::styled(
+                    format!("{} week{}", weekly_streak, if weekly_streak == 1 { "" } else { "s" }),
+                    Style::default().fg(if weekly_streak > 0 { self.theme.colors.success } else { self.theme.colors.text_dim }),
+                ),
+            ]),
+        ];
+
+        let overview = Paragraph::new(overview_lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(Style::default().fg(self.theme.colors.primary))
+                    .title(" Overview ")
+                    .title_style(self.theme.highlight()),
+            );
+        frame.render_widget(overview, stat_chunks[0]);
+
+        // Ease level breakdown
+        let ease_lines = vec![
+            Line::from(vec![
+                Span::styled("New: ", Style::default().fg(self.theme.colors.text_muted)),
+                Span::styled(ease_counts.new.to_string(), Style::default().fg(self.theme.colors.accent)),
+                Span::styled(" cards not yet studied", Style::default().fg(self.theme.colors.text_dim)),
+            ]),
+            Line::from(vec![
+                Span::styled("Easy: ", Style::default().fg(self.theme.colors.text_muted)),
+                Span::styled(ease_counts.easy.to_string(), Style::default().fg(self.theme.colors.rating_easy)),
+                Span::styled(" cards (ease >= 2.5)", Style::default().fg(self.theme.colors.text_dim)),
+            ]),
+            Line::from(vec![
+                Span::styled("Good: ", Style::default().fg(self.theme.colors.text_muted)),
+                Span::styled(ease_counts.good.to_string(), Style::default().fg(self.theme.colors.rating_good)),
+                Span::styled(" cards (ease 2.0-2.5)", Style::default().fg(self.theme.colors.text_dim)),
+            ]),
+            Line::from(vec![
+                Span::styled("Hard: ", Style::default().fg(self.theme.colors.text_muted)),
+                Span::styled(ease_counts.hard.to_string(), Style::default().fg(self.theme.colors.rating_hard)),
+                Span::styled(" cards (ease 1.5-2.0)", Style::default().fg(self.theme.colors.text_dim)),
+            ]),
+            Line::from(vec![
+                Span::styled("Struggling: ", Style::default().fg(self.theme.colors.text_muted)),
+                Span::styled(ease_counts.struggling.to_string(), Style::default().fg(self.theme.colors.rating_again)),
+                Span::styled(" cards (ease < 1.5)", Style::default().fg(self.theme.colors.text_dim)),
+            ]),
+        ];
+
+        let ease_block = Paragraph::new(ease_lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(Style::default().fg(self.theme.colors.accent))
+                    .title(" Cards by Difficulty ")
+                    .title_style(Style::default().fg(self.theme.colors.accent)),
+            );
+        frame.render_widget(ease_block, stat_chunks[2]);
+
+        // Key hints
+        let hints = KeyHints::new(&[
+            ("t", "theme"),
+            ("Esc", "back"),
+        ], &self.theme);
+        frame.render_widget(hints, chunks[3]);
+    }
+
     fn render_complete(&mut self, frame: &mut Frame, area: Rect) {
         let card_area = centered_rect(50, 40, area);
 
@@ -1125,4 +1288,81 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         Constraint::Percentage((100 - percent_x) / 2),
     ])
     .split(popup_layout[1])[1]
+}
+
+/// Counts of cards at each ease level.
+#[derive(Default)]
+struct EaseLevelCounts {
+    new: usize,
+    easy: usize,
+    good: usize,
+    hard: usize,
+    struggling: usize,
+}
+
+/// Calculate daily and weekly streaks from review dates.
+fn calculate_streaks(review_dates: &[chrono::NaiveDate]) -> (u32, u32) {
+    use chrono::Datelike;
+    use std::collections::HashSet;
+
+    if review_dates.is_empty() {
+        return (0, 0);
+    }
+
+    let today = chrono::Local::now().date_naive();
+    let unique_dates: HashSet<_> = review_dates.iter().cloned().collect();
+
+    // Daily streak: consecutive days ending today or yesterday
+    let mut daily_streak = 0u32;
+    let mut check_date = today;
+
+    // Allow starting from yesterday if no reviews today
+    if !unique_dates.contains(&today) {
+        check_date = today - chrono::Duration::days(1);
+        if !unique_dates.contains(&check_date) {
+            // No reviews today or yesterday, streak is 0
+            check_date = today; // Reset so the loop doesn't count anything
+        }
+    }
+
+    while unique_dates.contains(&check_date) {
+        daily_streak += 1;
+        check_date -= chrono::Duration::days(1);
+    }
+
+    // Weekly streak: consecutive weeks with at least one review
+    // A week is Mon-Sun, count weeks ending with current or previous week
+    let mut weekly_streak = 0u32;
+
+    // Get the Monday of current week
+    let days_since_monday = today.weekday().num_days_from_monday();
+    let mut week_start = today - chrono::Duration::days(days_since_monday as i64);
+
+    // Check if current week has reviews
+    let current_week_has_reviews = (0..7).any(|d| {
+        let day = week_start + chrono::Duration::days(d);
+        unique_dates.contains(&day)
+    });
+
+    if !current_week_has_reviews {
+        // Check previous week
+        week_start -= chrono::Duration::days(7);
+    }
+
+    // Count consecutive weeks
+    loop {
+        let week_has_reviews = (0..7).any(|d| {
+            let day = week_start + chrono::Duration::days(d);
+            unique_dates.contains(&day)
+        });
+
+        if week_has_reviews {
+            weekly_streak += 1;
+            week_start -= chrono::Duration::days(7);
+        } else {
+            break;
+        }
+    }
+
+    (daily_streak, weekly_streak)
 }
