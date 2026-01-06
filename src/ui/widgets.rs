@@ -206,21 +206,29 @@ impl Widget for FlashcardWidget<'_> {
             .style(Style::default().fg(self.theme.colors.text));
 
         // Calculate actual content height accounting for word wrapping
+        // Use textwrap to estimate line count (may differ slightly from ratatui's internal wrapping)
         let content_width = inner.width.saturating_sub(4) as usize;
-        let content_height: u16 = if content_width > 0 {
+        let estimated_lines: u16 = if content_width > 0 {
             let options = Options::new(content_width).word_splitter(WordSplitter::NoHyphenation);
             wrap(self.content, options).len() as u16
         } else {
             1
         };
 
-        // Center vertically
-        let vertical_padding = inner.height.saturating_sub(content_height) / 2;
+        // Only center vertically if there's comfortable space (at least 2 extra rows)
+        // This prevents text from being pushed down and clipped
+        let vertical_padding = if inner.height >= estimated_lines + 2 {
+            (inner.height - estimated_lines) / 2
+        } else {
+            // Not enough space for centering - just add minimal top padding
+            1.min(inner.height.saturating_sub(estimated_lines))
+        };
 
         let content_area = Rect {
             x: inner.x + 2,
             y: inner.y + vertical_padding,
             width: inner.width.saturating_sub(4),
+            // Give content the full remaining height to avoid clipping
             height: inner.height.saturating_sub(vertical_padding),
         };
 
