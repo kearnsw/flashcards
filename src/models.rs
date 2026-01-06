@@ -194,4 +194,22 @@ impl Deck {
 
         stats
     }
+
+    /// Update a card's front and back text.
+    pub fn update_card(&mut self, card_id: &str, front: String, back: String) -> bool {
+        if let Some(card) = self.cards.iter_mut().find(|c| c.id == card_id) {
+            card.front = front;
+            card.back = back;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Delete a card by ID.
+    pub fn delete_card(&mut self, card_id: &str) -> bool {
+        let len_before = self.cards.len();
+        self.cards.retain(|c| c.id != card_id);
+        self.cards.len() < len_before
+    }
 }

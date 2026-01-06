@@ -327,22 +327,57 @@ impl<'a> KeyHints<'a> {
 
 impl Widget for KeyHints<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let spans: Vec<Span> = self
-            .hints
-            .iter()
-            .flat_map(|(key, desc)| {
-                vec![
-                    Span::styled(*key, self.theme.key_highlight()),
-                    Span::styled(format!(" {} ", desc), self.theme.key_hint()),
-                    Span::styled("│ ", Style::default().fg(self.theme.colors.text_dim)),
-                ]
-            })
-            .collect();
+        let available_width = area.width as usize;
 
-        let line = Line::from(spans);
-        Paragraph::new(line)
-            .alignment(Alignment::Center)
-            .render(area, buf);
+        // Calculate hint widths and build spans
+        let mut lines: Vec<Line> = Vec::new();
+        let mut current_line: Vec<Span> = Vec::new();
+        let mut current_width: usize = 0;
+
+        for (i, (key, desc)) in self.hints.iter().enumerate() {
+            // Width: key + " " + desc + " " + "│ " (or nothing for last item)
+            let hint_width = key.len() + 1 + desc.len() + 1 + if i < self.hints.len() - 1 { 2 } else { 0 };
+
+            // Check if this hint fits on current line
+            if current_width + hint_width > available_width && !current_line.is_empty() {
+                // Remove trailing separator from current line
+                if let Some(last) = current_line.last() {
+                    if last.content.contains('│') {
+                        current_line.pop();
+                    }
+                }
+                lines.push(Line::from(current_line));
+                current_line = Vec::new();
+                current_width = 0;
+            }
+
+            current_line.push(Span::styled(*key, self.theme.key_highlight()));
+            current_line.push(Span::styled(format!(" {} ", desc), self.theme.key_hint()));
+            if i < self.hints.len() - 1 {
+                current_line.push(Span::styled("│ ", Style::default().fg(self.theme.colors.text_dim)));
+            }
+            current_width += hint_width;
+        }
+
+        // Add remaining line
+        if !current_line.is_empty() {
+            lines.push(Line::from(current_line));
+        }
+
+        // Render centered
+        for (i, line) in lines.iter().enumerate() {
+            if i < area.height as usize {
+                let line_area = Rect {
+                    x: area.x,
+                    y: area.y + i as u16,
+                    width: area.width,
+                    height: 1,
+                };
+                Paragraph::new(line.clone())
+                    .alignment(Alignment::Center)
+                    .render(line_area, buf);
+            }
+        }
     }
 }
 

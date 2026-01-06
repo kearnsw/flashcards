@@ -199,3 +199,72 @@ pub struct DeckInfo {
     pub card_count: usize,
     pub description: String,
 }
+
+/// Backup format containing all decks.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct Backup {
+    pub version: u32,
+    pub created_at: chrono::DateTime<chrono::Local>,
+    pub decks: Vec<Deck>,
+}
+
+impl DeckStorage {
+    /// Export all decks to a backup file.
+    pub fn export_backup(&self, path: &Path) -> Result<usize> {
+        let deck_infos = self.list_decks()?;
+        let mut decks = Vec::new();
+
+        for info in &deck_infos {
+            if let Ok(Some(deck)) = self.load_deck(&info.id) {
+                decks.push(deck);
+            }
+        }
+
+        let backup = Backup {
+            version: 1,
+            created_at: chrono::Local::now(),
+            decks,
+        };
+
+        let json = serde_json::to_string_pretty(&backup)?;
+        fs::write(path, json)?;
+
+        Ok(backup.decks.len())
+    }
+
+    /// Import decks from a backup file.
+    /// Returns (imported_count, skipped_count).
+    pub fn import_backup(&self, path: &Path) -> Result<(usize, usize)> {
+        let json = fs::read_to_string(path)?;
+        let backup: Backup = serde_json::from_str(&json)?;
+
+        let existing_ids: std::collections::HashSet<String> = self
+            .list_decks()?
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
+
+        let mut imported = 0;
+        let mut skipped = 0;
+
+        for deck in backup.decks {
+            if existing_ids.contains(&deck.id) {
+                skipped += 1;
+            } else {
+                self.save_deck(&deck)?;
+                imported += 1;
+            }
+        }
+
+        Ok((imported, skipped))
+    }
+
+    /// Get default backup path.
+    pub fn default_backup_path() -> PathBuf {
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        dirs::document_dir()
+            .or_else(dirs::home_dir)
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(format!("srl_backup_{}.json", timestamp))
+    }
+}

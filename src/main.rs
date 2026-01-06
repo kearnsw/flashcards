@@ -46,6 +46,14 @@ struct Args {
     /// Name for imported deck
     #[arg(long, default_value = "Imported Deck")]
     import_name: String,
+
+    /// Export all decks to a backup file
+    #[arg(short = 'x', long)]
+    export_backup: Option<PathBuf>,
+
+    /// Import decks from a backup file
+    #[arg(short = 'b', long)]
+    import_backup: Option<PathBuf>,
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -83,6 +91,24 @@ fn main() -> Result<()> {
             for (name, count) in results {
                 println!("  {} ({} cards)", name, count);
             }
+        }
+        return Ok(());
+    }
+
+    // Handle backup export
+    if let Some(backup_path) = args.export_backup {
+        let count = storage.export_backup(&backup_path)?;
+        println!("Exported {} decks to {}", count, backup_path.display());
+        return Ok(());
+    }
+
+    // Handle backup import
+    if let Some(backup_path) = args.import_backup {
+        let (imported, skipped) = storage.import_backup(&backup_path)?;
+        if skipped > 0 {
+            println!("Imported {} decks ({} skipped - already exist)", imported, skipped);
+        } else {
+            println!("Imported {} decks", imported);
         }
         return Ok(());
     }
