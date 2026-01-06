@@ -39,6 +39,10 @@ struct Args {
     #[arg(short, long)]
     import: Option<PathBuf>,
 
+    /// Import all CSV files from a folder (auto-names from filename)
+    #[arg(short = 'f', long)]
+    import_folder: Option<PathBuf>,
+
     /// Name for imported deck
     #[arg(long, default_value = "Imported Deck")]
     import_name: String,
@@ -57,15 +61,29 @@ fn main() -> Result<()> {
     // Initialize storage
     let storage = DeckStorage::new(decks_dir)?;
 
-    // Handle import if requested
+    // Handle single file import
     if let Some(csv_path) = args.import {
         let deck = storage.import_csv(&csv_path, &args.import_name)?;
         storage.save_deck(&deck)?;
         println!(
-            "✓ Imported {} cards into '{}'",
+            "Imported {} cards into '{}'",
             deck.cards.len(),
             deck.name
         );
+        return Ok(());
+    }
+
+    // Handle folder import
+    if let Some(folder_path) = args.import_folder {
+        let results = storage.import_folder(&folder_path)?;
+        if results.is_empty() {
+            println!("No CSV files found in {:?}", folder_path);
+        } else {
+            println!("Imported {} decks:", results.len());
+            for (name, count) in results {
+                println!("  {} ({} cards)", name, count);
+            }
+        }
         return Ok(());
     }
 

@@ -112,6 +112,57 @@ impl DeckStorage {
 
         Ok(deck)
     }
+
+    /// Import all CSV files from a folder.
+    /// Names decks based on filename, converting snake_case/kebab-case to Title Case.
+    pub fn import_folder(&self, folder_path: &Path) -> Result<Vec<(String, usize)>> {
+        let mut results = Vec::new();
+
+        for entry in fs::read_dir(folder_path)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.extension().map_or(false, |e| e == "csv") {
+                let deck_name = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(filename_to_title_case)
+                    .unwrap_or_else(|| "Imported Deck".to_string());
+
+                match self.import_csv(&path, &deck_name) {
+                    Ok(deck) => {
+                        let card_count = deck.cards.len();
+                        if card_count > 0 {
+                            self.save_deck(&deck)?;
+                            results.push((deck_name, card_count));
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to import {:?}: {}", path, e);
+                    }
+                }
+            }
+        }
+
+        Ok(results)
+    }
+}
+
+/// Convert a filename (snake_case or kebab-case) to Title Case.
+fn filename_to_title_case(name: &str) -> String {
+    name.split(|c| c == '_' || c == '-')
+        .filter(|s| !s.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => {
+                    first.to_uppercase().collect::<String>() + chars.as_str().to_lowercase().as_str()
+                }
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Summary info for a deck.

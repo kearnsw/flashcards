@@ -95,6 +95,22 @@ impl App {
         }
     }
 
+    pub fn delete_selected_deck(&mut self) {
+        if let Some(i) = self.deck_list_state.selected() {
+            if let Some(deck_info) = self.deck_list.get(i) {
+                let deck_id = deck_info.id.clone();
+                let _ = self.storage.delete_deck(&deck_id);
+                self.refresh_deck_list();
+                // Adjust selection if needed
+                if i >= self.deck_list.len() && !self.deck_list.is_empty() {
+                    self.deck_list_state.select(Some(self.deck_list.len() - 1));
+                } else if self.deck_list.is_empty() {
+                    self.deck_list_state.select(None);
+                }
+            }
+        }
+    }
+
     pub fn cycle_theme(&mut self) {
         let new_theme_name = self.theme.name.next();
         self.theme = Theme::new(new_theme_name);
@@ -235,6 +251,7 @@ impl App {
         match key {
             KeyCode::Char('q') | KeyCode::Esc => self.running = false,
             KeyCode::Char('t') => self.cycle_theme(),
+            KeyCode::Char('d') | KeyCode::Char('D') => self.delete_selected_deck(),
             KeyCode::Up | KeyCode::Char('k') => {
                 let i = self.deck_list_state.selected().unwrap_or(0);
                 let new_i = if i == 0 {
@@ -426,7 +443,8 @@ impl App {
         let hints = KeyHints::new(&[
             ("j/k", "navigate"),
             ("Enter", "select"),
-            ("n", "new deck"),
+            ("n", "new"),
+            ("d", "delete"),
             ("t", "theme"),
             ("q", "quit"),
         ], &self.theme);
