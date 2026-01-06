@@ -125,7 +125,7 @@ impl DeckStorage {
                 continue;
             }
 
-            let parts: Vec<&str> = line.split(',').collect();
+            let parts = parse_csv_line(line);
             if parts.len() >= 2 {
                 let front = parts[0].trim().to_string();
                 let back = parts[1].trim().to_string();
@@ -716,6 +716,40 @@ impl DeckStorage {
             }
         }
     }
+}
+
+/// Parse a CSV line respecting quoted fields.
+fn parse_csv_line(line: &str) -> Vec<String> {
+    let mut fields = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut chars = line.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        match c {
+            '"' if !in_quotes => {
+                in_quotes = true;
+            }
+            '"' if in_quotes => {
+                // Check for escaped quote ("")
+                if chars.peek() == Some(&'"') {
+                    current.push('"');
+                    chars.next();
+                } else {
+                    in_quotes = false;
+                }
+            }
+            ',' if !in_quotes => {
+                fields.push(current.clone());
+                current.clear();
+            }
+            _ => {
+                current.push(c);
+            }
+        }
+    }
+    fields.push(current);
+    fields
 }
 
 /// Strip HTML tags from a string (basic implementation).
