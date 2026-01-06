@@ -386,29 +386,19 @@ impl App {
 
     fn render_deck_select(&mut self, frame: &mut Frame, area: Rect) {
         let chunks = Layout::vertical([
-            Constraint::Length(14),  // Logo
-            Constraint::Length(2),   // Title
+            Constraint::Length(1),   // Top padding
+            Constraint::Length(9),   // Logo
+            Constraint::Length(2),   // Spacing
             Constraint::Min(5),      // Deck list
             Constraint::Length(3),   // Help
         ])
         .split(area);
 
         // Logo
-        Logo::render_to(&self.theme, chunks[0], frame.buffer_mut());
-
-        // Title with theme indicator
-        let title = Paragraph::new(Line::from(vec![
-            Span::styled("Select a deck to study", self.theme.subtitle()),
-            Span::styled(
-                format!("  [{}]", self.theme.name.display_name()),
-                Style::default().fg(self.theme.colors.text_dim),
-            ),
-        ]))
-        .alignment(Alignment::Center);
-        frame.render_widget(title, chunks[1]);
+        Logo::render_to(&self.theme, chunks[1], frame.buffer_mut());
 
         // Deck list
-        let list_area = centered_rect(60, 100, chunks[2]);
+        let list_area = centered_rect(60, 100, chunks[3]);
 
         let items: Vec<ListItem> = self
             .deck_list
@@ -439,16 +429,18 @@ impl App {
 
         frame.render_stateful_widget(list, list_area, &mut self.deck_list_state);
 
-        // Key hints
-        let hints = KeyHints::new(&[
-            ("j/k", "navigate"),
+        // Key hints with theme indicator
+        let theme_hint = format!("[{}]", self.theme.name.display_name());
+        let hints_data: [(&str, &str); 6] = [
+            ("j/k", "nav"),
             ("Enter", "select"),
             ("n", "new"),
-            ("d", "delete"),
-            ("t", "theme"),
+            ("d", "del"),
+            ("t", &theme_hint),
             ("q", "quit"),
-        ], &self.theme);
-        frame.render_widget(hints, chunks[3]);
+        ];
+        let hints = KeyHints::new(&hints_data, &self.theme);
+        frame.render_widget(hints, chunks[4]);
     }
 
     fn render_study(&mut self, frame: &mut Frame, area: Rect) {

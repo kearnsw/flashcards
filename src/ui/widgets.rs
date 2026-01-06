@@ -21,24 +21,29 @@ pub struct Logo<'a> {
 
 impl<'a> Logo<'a> {
     const ART: &'static str = r#"
-    ╭─────────────────────────────────────────╮
-    │  _____ _           _                    │
-    │ |  ___| | __ _ ___| |__   ___ __ _ _ __ │
-    │ | |_  | |/ _` / __| '_ \ / __/ _` | '__││
-    │ |  _| | | (_| \__ \ | | | (_| (_| | |   │
-    │ |_|   |_|\__,_|___/_| |_|\___\__,_|_|   │
-    │                     ┌───────────────┐   │
-    │      ╭────╮         │ Spaced        │   │
-    │      │ 🧠 │         │ Repetition    │   │
-    │      ╰────╯         │ Learning      │   │
-    │                     └───────────────┘   │
-    ╰─────────────────────────────────────────╯"#;
+  ███████╗██████╗ ██╗
+  ██╔════╝██╔══██╗██║
+  ███████╗██████╔╝██║
+  ╚════██║██╔══██╗██║
+  ███████║██║  ██║███████╗
+  ╚══════╝╚═╝  ╚═╝╚══════╝"#;
+
+    const SUBTITLE: &'static str = "spaced  repetition  learning";
 
     pub fn new(theme: &'a Theme) -> Self {
         Self { theme }
     }
 
     pub fn render_to(theme: &Theme, area: Rect, buf: &mut Buffer) {
+        // Split area for logo and subtitle
+        let chunks = Layout::vertical([
+            Constraint::Length(7), // ASCII art
+            Constraint::Length(1), // spacing
+            Constraint::Length(1), // subtitle
+        ])
+        .split(area);
+
+        // Render ASCII art
         let lines: Vec<Line> = Self::ART
             .lines()
             .skip(1)
@@ -51,8 +56,15 @@ impl<'a> Logo<'a> {
 
         let para = Paragraph::new(lines)
             .alignment(Alignment::Center);
+        para.render(chunks[0], buf);
 
-        para.render(area, buf);
+        // Render subtitle
+        let subtitle = Paragraph::new(Span::styled(
+            Self::SUBTITLE,
+            Style::default().fg(theme.colors.text_muted),
+        ))
+        .alignment(Alignment::Center);
+        subtitle.render(chunks[2], buf);
     }
 }
 
