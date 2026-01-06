@@ -1,6 +1,6 @@
 [package]
 name = "srl-tui"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2021"
 description = "Spaced repetition flashcard TUI"
 license = "MIT"
@@ -33,6 +33,9 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 
 # Unicode display width
 unicode-width = "0.1"
+
+# Text wrapping
+textwrap = "0.16"
 
 # CLI arguments
 clap = { version = "4.0", features = ["derive"] }

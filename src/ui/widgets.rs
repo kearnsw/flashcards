@@ -7,6 +7,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{block::BorderType, Block, Borders, Paragraph, Widget, Wrap},
 };
+use textwrap::{wrap, Options, WordSplitter};
 use unicode_width::UnicodeWidthStr;
 
 use super::theme::Theme;
@@ -204,8 +205,16 @@ impl Widget for FlashcardWidget<'_> {
             .wrap(Wrap { trim: true })
             .style(Style::default().fg(self.theme.colors.text));
 
+        // Calculate actual content height accounting for word wrapping
+        let content_width = inner.width.saturating_sub(4) as usize;
+        let content_height: u16 = if content_width > 0 {
+            let options = Options::new(content_width).word_splitter(WordSplitter::NoHyphenation);
+            wrap(self.content, options).len() as u16
+        } else {
+            1
+        };
+
         // Center vertically
-        let content_height = self.content.lines().count() as u16;
         let vertical_padding = inner.height.saturating_sub(content_height) / 2;
 
         let content_area = Rect {
