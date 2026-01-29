@@ -37,8 +37,8 @@ brew install srl
 ### From Source
 
 ```bash
-git clone https://github.com/kearnsw/flashcards.git
-cd flashcards
+git clone https://github.com/kearnsw/srl-tui.git
+cd srl-tui
 cargo install --path .
 ```
 
